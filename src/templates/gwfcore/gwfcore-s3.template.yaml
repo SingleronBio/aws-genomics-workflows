@@ -15,10 +15,6 @@ Mappings:
           Value: "default"
 
 Parameters:
-  Namespace:
-    Type: String
-    Description: Namespace (e.g. project name) to use to label resources
-  
   S3BucketName:
     Type: String
     Description: >-
@@ -54,17 +50,8 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       BucketName:
-        Fn::If:
-          - GenerateBucketName
-          - Fn::Join: 
-            - "-"
-            - - "gwfcore"
-              - !Ref Namespace
-          - !Ref S3BucketName
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-             SSEAlgorithm: AES256
+        - GenerateBucketName
+        - !Ref S3BucketName
       Tags:
         - Key: architecture
           Value: !FindInMap ["TagMap", "default", "architecture"]
@@ -81,5 +68,5 @@ Outputs:
       Fn::If:
         - BucketDoesNotExist
         - !GetAtt S3Bucket.Arn
-        - !Join [":::", ["arn:aws:s3", !Ref S3BucketName]]
+        - !Join [":::", ["arn:aws-cn:s3", !Ref S3BucketName]]
 ...

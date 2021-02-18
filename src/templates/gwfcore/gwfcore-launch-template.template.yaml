@@ -16,17 +16,22 @@ Mappings:
           Value: "default"
 
 Parameters:
-  Namespace:
-    Type: String
-    Description: Namespace (e.g. project name) to use to label resources
   LaunchTemplateNamePrefix:
     Type: String
-    Default: gwfcore
+    Default: AWSGlobal
     Description: Name of the launch template. This will be made unique using the Stack ID.
   DockerStorageVolumeSize:
     Type: Number
-    Default: 100
+    Default: 50
     Description: The initial size of the volume Docker will use for image and metadata storage (GB)
+  ArtifactRootUrl:
+    Type: String
+    Default: s3://singleron-ami/AWSGlobal
+    Description: >-
+      Root URL for where artifacts / additions scripts are stored
+  FsxMountPoint:
+    Type: String
+    Description: Fsx mount command
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -34,29 +39,23 @@ Metadata:
       - Label:
           default: "Required"
         Parameters:
-          - Namespace
+          - ArtifactRootUrl
+          - FsxMountPoint
       - Label:
           default: "Optional"
         Parameters:
           - LaunchTemplateNamePrefix
           - DockerStorageVolumeSize
 
-Conditions:
-  NoNamespace: !Equals [ !Ref Namespace, "" ]
-
 Resources:
   EC2LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateName: 
-        Fn::Join: 
+        Fn::Join:
           - "-"
           - - !Ref LaunchTemplateNamePrefix
-            - Fn::If:
-                - NoNamespace
-                - !Select [2, !Split ["/", !Ref "AWS::StackId" ]]
-                - !Ref Namespace
-        
+            - !Select [2, !Split ["/", !Ref "AWS::StackId" ]]
       LaunchTemplateData:
         # Used in tandem with UserData to check if the instance is provisioned
         # correctly. It is important to terminate mis-provisioned instances before
@@ -71,19 +70,12 @@ Resources:
           - Ebs:
               DeleteOnTermination: True
               VolumeSize: 50
-              VolumeType: gp2
+              VolumeType: gp3
             DeviceName: /dev/xvda
           - Ebs:
-              Encrypted: True
-              DeleteOnTermination: True
-              VolumeSize: 22
-              VolumeType: gp2
-            DeviceName: /dev/xvdcz
-          - Ebs:
-              Encrypted: True
               DeleteOnTermination: True
               VolumeSize: !Ref DockerStorageVolumeSize
-              VolumeType: gp2
+              VolumeType: gp3
             DeviceName: /dev/xvdba
         UserData:
           Fn::Base64:
@@ -99,24 +91,27 @@ Resources:
                 - btrfs-progs
                 - sed
                 - git
-                - amazon-ssm-agent
                 - unzip
 
                 runcmd:
                 # install aws-cli v2 and copy the static binary in an easy to find location for bind-mounts into containers
-                - curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+                - curl -s "https://singleron-ami.s3.cn-northwest-1.amazonaws.com.cn/AWSGlobal/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
                 - unzip -q /tmp/awscliv2.zip -d /tmp
                 - /tmp/aws/install -b /usr/bin
 
                 # check that the aws-cli was actually installed. if not shutdown (terminate) the instance
                 - command -v aws || shutdown -P now
-
+                - amazon-linux-extras install -y lustre2.10
                 - mkdir -p /opt/aws-cli/bin
                 - cp -a $(dirname $(find /usr/local/aws-cli -name 'aws' -type f))/. /opt/aws-cli/bin/
 
+                - mkdir - p /usr/local/aws-cli/fsx
+                - mount -t lustre -o ro,noatime,flock ${FsxMountPoint} /usr/local/aws-cli/fsx
+
                 # set environment variables for provisioning
-                - export GWFCORE_NAMESPACE=${Namespace}
-                - export INSTALLED_ARTIFACTS_S3_ROOT_URL=$(aws ssm get-parameter --name /gwfcore/${Namespace}/installed-artifacts/s3-root-url --query 'Parameter.Value' --output text)
+                - export ARTIFACT_S3_ROOT_URL=${ArtifactRootUrl}
+                - export AWS_DEFAULT_REGION=$(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
+                - aws configure set default.region $AWS_DEFAULT_REGION
 
                 # enable ecs spot instance draining
                 - echo ECS_ENABLE_SPOT_INSTANCE_DRAINING=true >> /etc/ecs/ecs.config
@@ -125,7 +120,7 @@ Resources:
                 - echo ECS_IMAGE_PULL_BEHAVIOR=prefer-cached >> /etc/ecs/ecs.config
 
                 - cd /opt
-                - aws s3 sync $INSTALLED_ARTIFACTS_S3_ROOT_URL/ecs-additions ./ecs-additions
+                - aws s3 sync --no-progress $ARTIFACT_S3_ROOT_URL ./
                 - chmod a+x /opt/ecs-additions/provision.sh
                 - /opt/ecs-additions/provision.sh
 

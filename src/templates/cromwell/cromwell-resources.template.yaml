@@ -20,14 +20,12 @@ Metadata:
           default: "Stack Configuration"
         Parameters:
           - Namespace
-          - GWFCoreNamespace
 
       - Label:
           default: "Network Configuration"
         Parameters:
           - VpcId
           - ServerSubnetID
-          - DBSubnetIDs
 
       - Label:
           default: "Instance Configuration"
@@ -35,6 +33,7 @@ Metadata:
           - LatestAmazonLinuxAMI
           - InstanceType
           - InstanceName
+          - KeyName
           - SSHLocation
           - HTTPLocation
 
@@ -42,11 +41,12 @@ Metadata:
           default: "Cromwell Configuration"
         Parameters:
           - CromwellVersion
-          - CromwellVersionSpecified
-          - CromwellJarUrl
-          - S3OpenDataBucketARNs
+          - DBAddress
           - DBUsername
           - DBPassword
+          - BatchQueue
+          - S3BucketName
+
       
     ParameterLabels:
       VpcId:
@@ -61,19 +61,20 @@ Metadata:
         default: "SSH Address Range"
       HTTPLocation:
         default: "HTTP Address Range"
-      S3OpenDataBucketARNs:
-        default: "S3 Open Data Bucket ARNs"
       CromwellVersion:
         default: "Cromwell Version"
-      CromwellVersionSpecified:
-        default: "Cromwell Version Specified"
-      DBSubnetIDs:
-        default: "Database Subnet IDs"
+      DBAddress:
+        default: "Cromwell Database Endpoint Address"
       DBUsername:
         default: "Cromwell Database Username"
       DBPassword:
         default: "Cromwell Database Password"
-
+      BatchQueue:
+        default: "Default Batch Queue"
+      S3BucketName:
+        default: "The name of the S3 bucket which will store the results of genomics analyses."
+      KeyName:
+        default: "Key Pair Name"
 
 # Parameters
 Parameters:
@@ -81,12 +82,7 @@ Parameters:
     Type: String
     Description: >-
       Namespace (e.g. project name) to use to label resources.
-  
-  GWFCoreNamespace:
-    Type: String
-    Description: >-
-      Namespace of the GWFCore deployment to use.
-  
+
   InstanceType:
     Description: >-
       EC2 instance type.  Cromwell itself does not require much compute power. 
@@ -95,11 +91,10 @@ Parameters:
     Type: String
     Default: t3.medium
     AllowedValues:
-    - t3.micro
-    - t3.medium
-    - t3.large
-    - t3.xlarge
-    - t3.2xlarge
+      - t3.medium
+      - t3.large
+      - t3a.medium
+      - t3a.large
     ConstraintDescription: "Must be 't3' instance type."
   
   VpcId:
@@ -115,42 +110,27 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
     AllowedValues:
-      #- /aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-gp2
+      - /aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-gp2
       - /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
   
   CromwellVersion:
-    Type: String
-    Description: >-
-      Version of Cromwell to install. "latest" will retrieve the currently released
-      version of Cromwell from Github.
-    AllowedValues:
-      - latest
-      - specify ...
-    Default: latest
-  
-  CromwellVersionSpecified:
-    Type: String
+    Type: Number
     Description: >-
       Specific version of Cromwell to install.  Must match a released version number.
-      For example, 52, 52.1, etc. The minimum supported version is 52. Ignored if "Cromwell Version" is set to "latest".
-    Default: ""
-  
-  CromwellJarUrl:
+      For example, 52, 52.1, etc. The minimum supported version is 52.
+    MinValue: 52
+    Default: 55
+
+  DBAddress:
     Type: String
     Description: >-
-      URL to a pre-built cromwell-*.jar file.  Example: https://mycicdserver.com/build/cromwell-XX-SNAP.jar.
-      If this is specifed, CromwellVersion is ignored.
-    Default: ""
-  
-  DBSubnetIDs:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: Minimum 2 subnets for the Cromwell Database. Private subnets are recommended.
+      The endpoint address for the Aurora MySQL RDS cluster that will be used as Cromwell's database
 
   DBUsername:
     Type: String
     Description: >-
       The master username for the Aurora MySQL RDS cluster that will be used as Cromwell's database
-    Default: cromwell
+    Default: admin
     MaxLength: 16
     MinLength: 1
     AllowedPattern: "^[a-zA-Z]{1}[a-zA-Z0-9]{0,15}$"
@@ -166,7 +146,6 @@ Parameters:
     AllowedPattern: '^[ -~][^"@/]{7,}$'
     ConstraintDescription: >-
       DBPassword must have at least 8 printable ASCII characters. Can't contain any of the following: / (slash), "(double quote) and @ (at sign).
-
 
   InstanceName:
     Type: String
@@ -195,35 +174,24 @@ Parameters:
     AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
     ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
 
-  S3OpenDataBucketARNs:
-    Description: Open datasets on AWS S3 for workflow inputs
+  BatchQueue:
+    Description: ARN of the AWS Batch Job Queue this server will use by default
     Type: String
-    Default: "arn:aws:s3:::gatk-test-data/*,arn:aws:s3:::broad-references/*"
 
+  S3BucketName:
+    Description: S3 bucket you are using for workflow inputs and outputs
+    Type: String
 
-Conditions:
-  GetLatestCromwellVersion:
-    Fn::Equals:
-      - !Ref CromwellVersion
-      - latest
-
-  NoCromwellJar:
-    Fn::Equals:
-      - !Ref CromwellJarUrl
-      - ""
-
-  UseCromwellJar:
-    Fn::Not:
-      - Condition: NoCromwellJar
-
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair that is on your local machine.
 
 # Resources
 Resources:
   Ec2InstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
       Policies:
         - PolicyName: !Sub CromwellServer-BatchQueue-Access-${AWS::Region}
           PolicyDocument:
@@ -250,8 +218,8 @@ Resources:
             Statement:
               - Effect: Allow
                 Resource:
-                  - !Join ["", ["arn:aws:s3:::", !Sub "{{resolve:ssm:/gwfcore/${GWFCoreNamespace}/s3-bucket:1}}"]] 
-                  - !Join ["", ["arn:aws:s3:::", !Sub "{{resolve:ssm:/gwfcore/${GWFCoreNamespace}/s3-bucket:1}}", "/*"]]
+                  - !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName]]
+                  - !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName, "/*"]]
                 Action:
                   - "s3:*"
               - Effect: Allow
@@ -259,29 +227,26 @@ Resources:
                 Action:
                   - "s3:ListBucket"
                   - "s3:ListAllMyBuckets"
-              - Effect: Allow
-                Resource: !Split [",", !Ref S3OpenDataBucketARNs]
-                Action:
-                  - "s3:GetObject"
         
         - PolicyName: !Sub CromwellServer-CloudWatch-Access-${AWS::Region}
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               Effect: Allow
-              Resource: "arn:aws:logs:*:*:*"
+              Resource: "arn:aws-cn:logs:*:*:*"
               Action:
                 - "logs:CreateLogGroup"
                 - "logs:CreateLogStream"
                 - "logs:PutLogEvents"
                 - "logs:DescribeLogStreams"
-
+      ManagedPolicyArns:
+      - "arn:aws-cn:iam::aws:policy/AmazonS3ReadOnlyAccess"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
         - Effect: Allow
           Principal:
-            Service: ec2.amazonaws.com
+            Service: ec2.amazonaws.com.cn
           Action: sts:AssumeRole
   
   EC2InstanceProfile:
@@ -333,6 +298,7 @@ Resources:
             - config1
             - config2
             - config3
+            - config4
 
         config1:
           files:
@@ -360,31 +326,30 @@ Resources:
               group: root
             
             "/home/ec2-user/get_cromwell.sh":
-              content: !Sub
-              - |
+              content: !Sub |
                 #!/bin/bash
-                url=${DownloadUrl}
-                curl --retry 5 --retry-connrefused -LO $url
+                aws s3 --region ${AWS::Region} cp s3://singleron-ami/cromwell/cromwell-${CromwellVersion}.jar .
+                aws s3 --region ${AWS::Region} cp s3://singleron-ami/cromwell/womtool-${CromwellVersion}.jar .
                 ln -s $(find . | grep "cromwell.*\.jar") cromwell.jar
-              - DownloadUrl:
-                  Fn::If:
-                    - UseCromwellJar
-                    - !Ref CromwellJarUrl
-                    - !Sub
-                      - $(curl --silent --retry 5 --retry-connrefused https://api.github.com/repos/broadinstitute/cromwell/releases/${CromwellVersionPath} | jq -r .assets[0].browser_download_url)
-                      - CromwellVersionPath:
-                          Fn::If:
-                          - GetLatestCromwellVersion
-                          - !Ref CromwellVersion
-                          - !Join ["/", ["tags", !Ref CromwellVersionSpecified]]
+                ln -s $(find . | grep "womtool.*\.jar") womtool.jar
+
+              mode: "000755"
+              owner: "ec2-user"
+              group: "ec2-user"
+
+            "/home/ec2-user/get_cromwell_tools.sh":
+              content: !Sub |
+                #!/bin/bash
+                aws s3 --region ${AWS::Region} cp s3://singleron-ami/cromwell/cromshell .
+                chmod +x cromshell
+                sudo mv cromshell /usr/local/bin/
 
               mode: "000755"
               owner: "ec2-user"
               group: "ec2-user"
 
             "/home/ec2-user/cromwell.conf":
-              content: !Sub
-                - |
+              content: !Sub |
                   include required(classpath("application"))
 
                   webservice {
@@ -434,24 +399,21 @@ Resources:
                         config {
                           numSubmitAttempts = 10
                           numCreateDefinitionAttempts = 10
-                          root = "s3://${S3Bucket}/cromwell-execution"
+                          root = "s3://${S3BucketName}/cromwell-execution"
                           auth = "default"
-                          default-runtime-attributes { queueArn = "${BatchQueue}" , scriptBucketName = "${S3Bucket}" }
-                          filesystems { 
-                            s3 { 
+                          default-runtime-attributes { queueArn = "${BatchQueue}" , scriptBucketName = "${S3BucketName}" }
+                          filesystems {
+                            s3 {
                               auth = "default"
                               duplication-strategy: [
                                 "hard-link", "soft-link", "copy"
                               ]
-                            } 
+                            }
                           }
                         }
                       }
                     }
                   }
-                - DBAddress: !GetAtt RDSCluster.Endpoint.Address
-                  BatchQueue: !Sub '{{resolve:ssm:/gwfcore/${GWFCoreNamespace}/job-queue/default:1}}'
-                  S3Bucket: !Sub "{{resolve:ssm:/gwfcore/${GWFCoreNamespace}/s3-bucket:1}}"
               mode: "000644"
               owner: "ec2-user"
               group: "ec2-user"
@@ -605,11 +567,22 @@ Resources:
             02_start_cromwell:
               cwd: "/home/ec2-user"
               command: "sudo -u ec2-user /usr/local/bin/supervisord"
+
+        config4:
+          commands:
+            00_get_cromwell_tools:
+              cwd: "/home/ec2-user/"
+              command: "./get_cromwell_tools.sh"
+            
+            01_chown_womtool:
+              cwd: "/home/ec2-user/"
+              command: "chown ec2-user:ec2-user womtool*.jar"
     
     Properties:
       ImageId: !Ref LatestAmazonLinuxAMI
       InstanceType: !Ref InstanceType
       IamInstanceProfile: !Ref EC2InstanceProfile
+      KeyName: !Ref KeyName
       Tags:
         - Key: Name
           Value: !Sub ${InstanceName}-${Namespace}
@@ -650,73 +623,11 @@ Resources:
       ResourceSignal:
         Timeout: PT15M
 
-  RDSSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Limit access to Cromwell DB to just the Cromwell server security group
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          SourceSecurityGroupId: !GetAtt EC2SecurityGroup.GroupId
-          ToPort: 3306
-          FromPort: 3306
-      Tags:
-        - Key: Name
-          Value: !Sub cromwell-db-sg-${Namespace}
-        - Key: architecture
-          Value: !FindInMap ["TagMap", "default", "architecture"]
-        - Key: solution
-          Value: !FindInMap ["TagMap", "default", "solution"]
-  DBSubnetGroup:
-    Type: 'AWS::RDS::DBSubnetGroup'
-    Properties:
-      DBSubnetGroupDescription: !Ref 'AWS::StackName'
-      SubnetIds: !Ref DBSubnetIDs
-      Tags:
-        - Key: Name
-          Value: !Sub cromwell-db-subnet-group-${Namespace}
-        - Key: architecture
-          Value: !FindInMap ["TagMap", "default", "architecture"]
-        - Key: solution
-          Value: !FindInMap ["TagMap", "default", "solution"]
-
-  RDSCluster:
-    Type: 'AWS::RDS::DBCluster'
-    Properties:
-      MasterUsername: !Ref DBUsername
-      MasterUserPassword: !Ref DBPassword
-      DBClusterIdentifier: !Sub cromwell-${Namespace}
-      BackupRetentionPeriod: 7
-      DatabaseName: cromwell
-      Engine: aurora
-      EngineMode: serverless
-      EnableHttpEndpoint: true
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      ScalingConfiguration:
-        AutoPause: true
-        MinCapacity: 1
-        MaxCapacity: 64
-        SecondsUntilAutoPause: 1000
-      StorageEncrypted: true
-      VpcSecurityGroupIds: [!GetAtt RDSSecurityGroup.GroupId]
-      Tags:
-        - Key: architecture
-          Value: !FindInMap ["TagMap", "default", "architecture"]
-        - Key: solution
-          Value: !FindInMap ["TagMap", "default", "solution"]
-
 Outputs:
   CromwellVersion:
     Description: Version of Cromwell installed.
-    Value:
-      Fn::If:
-        - UseCromwellJar
-        - !Ref CromwellJarUrl
-        - Fn::If:
-            - GetLatestCromwellVersion
-            - !Ref CromwellVersion
-            - !Ref CromwellVersionSpecified
-  
+    Value: !Ref CromwellVersion
+
   EC2Instance:
     Description: The EC2 Instance ID of your Cromwell Server
     Value: !Ref EC2Instance
@@ -733,7 +644,7 @@ Outputs:
     Value:
       Fn::Join:
         - "/"
-        - - !Sub https://${AWS::Region}.console.aws.amazon.com
+        - - !Sub https://${AWS::Region}.console.amazonaws.com.cn
           - !Sub cloudwatch/home?region=${AWS::Region}#logsV2:log-groups
           - !Sub log-group/cromwell-server/log-events/${EC2Instance}
     Description: Cromwell server log stream

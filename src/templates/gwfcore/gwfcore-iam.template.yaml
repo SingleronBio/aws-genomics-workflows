@@ -4,10 +4,6 @@ Description: >-
   (WWPS-GLS-WF-GWFCORE-IAM) Creates IAM roles to use with AWS Batch scalable genomics 
   workflow environment.
 Parameters:
-    Namespace:
-      Type: String
-      Description: Namespace (e.g. project name) to use to label resources
-  
     S3BucketName:
       Type: String
       Description: The name of the S3 bucket which will store the results of genomics analyses.
@@ -21,16 +17,16 @@ Resources:
             Version: 2012-10-17
             Statement:
               - Effect: Deny
-                Resource: !Join ["", ["arn:aws:s3:::", !Ref S3BucketName]]
+                Resource: !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName]]
                 Action:
                   - "s3:Delete*"
                   - "s3:PutBucket*"
               - Effect: Allow
-                Resource: !Join ["", ["arn:aws:s3:::", !Ref S3BucketName]]
+                Resource: !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName]]
                 Action:
                   - "s3:ListBucket*"
               - Effect: Allow
-                Resource: !Join ["", ["arn:aws:s3:::", !Ref S3BucketName, "/*"]]
+                Resource: !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName, "/*"]]
                 Action:
                   - "s3:*"
       AssumeRolePolicyDocument:
@@ -51,7 +47,7 @@ Resources:
           - Effect: Allow
             Principal:
               Service:
-                - "ec2.amazonaws.com"
+                - "ec2.amazonaws.com.cn"
             Action:
               - "sts:AssumeRole"
       Policies:
@@ -66,21 +62,21 @@ Resources:
               #   Effect: Deny
               #   Action:
               #     - "s3:PutObject"
-              #   Resource: !Join ["", ["arn:aws:s3:::", !Ref S3BucketName, "/*"]]
+              #   Resource: !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName, "/*"]]
               #   Condition:
               #     StringNotEquals: { "s3:x-amz-server-side-encryption": "AES256" }
               # - Sid: S3DenyUnEncryptedObjectUploads
               #   Effect: Deny
               #   Action:
               #     - "s3:PutObject"
-              #   Resource: !Join ["", ["arn:aws:s3:::", !Ref S3BucketName, "/*"]]
+              #   Resource: !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName, "/*"]]
               #   Condition: 
               #     "Null" : { "s3:x-amz-server-side-encryption": true }
               - Sid: S3BucketAllowAllObjectOps
                 Effect: Allow
                 Resource: 
-                  - !Join ["", ["arn:aws:s3:::", !Ref S3BucketName]]
-                  - !Join ["", ["arn:aws:s3:::", !Ref S3BucketName, "/*"]]
+                  - !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName]]
+                  - !Join ["", ["arn:aws-cn:s3:::", !Ref S3BucketName, "/*"]]
                 Action:
                   - "s3:*"
  
@@ -98,37 +94,9 @@ Resources:
                 - "ec2:modifyInstanceAttribute"
                 - "ec2:describeVolumes"
               Resource: "*"
-        
-        # enable retrieving provisioning scripts from codecommit
-        - PolicyName: !Sub CodeCommit-Access-${AWS::Region}
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              Effect: Allow
-              Action:
-                - codecommit:GitPull
-              Resource:
-                - !Sub arn:aws:codecommit:*:${AWS::AccountId}:*-${Namespace}
-        
-        # enable reading SSM parameters by provisioning scripts
-        - PolicyName: !Sub SystemsManager-Access-${AWS::Region}
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ssm:GetParameter*
-                Resource:
-                  - !Sub arn:aws:ssm:*:${AWS::AccountId}:parameter/gwfcore/${Namespace}/*
-              - Effect: Allow
-                Action:
-                  - ssm:DescribeParameters
-                Resource: "*"
-                
       ManagedPolicyArns:
-      - "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
-      - "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
-      - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      - "arn:aws-cn:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+      - "arn:aws-cn:iam::aws:policy/AmazonS3ReadOnlyAccess"
   BatchInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -147,7 +115,7 @@ Resources:
             Action:
               - "sts:AssumeRole"
       ManagedPolicyArns:
-      - "arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole"
+      - "arn:aws-cn:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole"
   BatchServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -159,7 +127,7 @@ Resources:
             Service: batch.amazonaws.com
           Action: sts:AssumeRole
       ManagedPolicyArns:
-      - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+      - arn:aws-cn:iam::aws:policy/service-role/AWSBatchServiceRole
 Outputs:
   BatchJobRoleArn:
     Value: !GetAtt BatchJobRole.Arn

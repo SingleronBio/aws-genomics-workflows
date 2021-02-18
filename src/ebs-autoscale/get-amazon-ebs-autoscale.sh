@@ -108,9 +108,9 @@ function release() {
     fi
 
     if [[ "$ARTIFACT_ROOT_URL" =~ ^http.* ]]; then
-        curl -LO $ARTIFACT_ROOT_URL/amazon-ebs-autoscale.tgz
+        curl -LO "$ARTIFACT_ROOT_URL/amazon-ebs-autoscale.tgz"
     elif [[ "$ARTIFACT_ROOT_URL" =~ ^s3.* ]]; then
-        aws s3 cp --no-progress $ARTIFACT_ROOT_URL/amazon-ebs-autoscale.tgz .
+        aws s3 cp --no-progress "$ARTIFACT_ROOT_URL/amazon-ebs-autoscale.tgz" .
     else
         echo "unrecognized protocol in $ARTIFACT_ROOT_URL for release()"
         exit 1
@@ -130,7 +130,9 @@ function dist_release() {
     fi
 
     if [[ "$ARTIFACT_ROOT_URL" =~ ^s3.* ]]; then
-        aws s3 cp --no-progress $ARTIFACT_ROOT_URL/amazon-ebs-autoscale.tgz .
+        if [ ! -f /opt/amazon-ebs-autoscale.tgz ]; then
+            aws s3 cp --no-progress "$ARTIFACT_ROOT_URL/amazon-ebs-autoscale.tgz" .
+        fi
     else
         echo "unrecognized protocol in $ARTIFACT_ROOT_URL for dist_release()"
         exit 1
@@ -161,7 +163,7 @@ function install() {
     
     cp -au /var/lib/docker /var/lib/docker.bk
     rm -rf /var/lib/docker/*
-    sh /opt/amazon-ebs-autoscale/install.sh -d /dev/xvdba -f $filesystem -m /var/lib/docker > /var/log/ebs-autoscale-install.log 2>&1
+    sh /opt/amazon-ebs-autoscale/install.sh -d /dev/xvdba -f "$filesystem" -m /var/lib/docker > /var/log/ebs-autoscale-install.log 2>&1
 
     awk -v docker_storage_options="$docker_storage_options" \
         '{ sub(/DOCKER_STORAGE_OPTIONS=.*/, docker_storage_options); print }' \
