@@ -596,7 +596,7 @@ Resources:
           #!/bin/bash -x
           yum -y update
           yum install -y aws-cfn-bootstrap
-          yum install -y jq awslogs python3 java
+          yum install -y jq awslogs python3 java mailx
 
           amazon-linux-extras install -y nginx1
           pip3 install supervisor
