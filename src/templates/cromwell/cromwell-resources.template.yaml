@@ -72,7 +72,7 @@ Metadata:
       BatchQueue:
         default: "Default Batch Queue"
       S3BucketName:
-        default: "The name of the S3 bucket which will store the results of genomics analyses."
+        default: "S3 Bucket Name"
       KeyName:
         default: "Key Pair Name"
 
@@ -328,8 +328,8 @@ Resources:
             "/home/ec2-user/get_cromwell.sh":
               content: !Sub |
                 #!/bin/bash
-                aws s3 --region ${AWS::Region} cp s3://singleron-ami/cromwell/cromwell-${CromwellVersion}.jar .
-                aws s3 --region ${AWS::Region} cp s3://singleron-ami/cromwell/womtool-${CromwellVersion}.jar .
+                aws s3 --region ${AWS::Region} cp s3://singleronbio-ami/cromwell/cromwell-${CromwellVersion}.jar .
+                aws s3 --region ${AWS::Region} cp s3://singleronbio-ami/cromwell/womtool-${CromwellVersion}.jar .
                 ln -s $(find . | grep "cromwell.*\.jar") cromwell.jar
                 ln -s $(find . | grep "womtool.*\.jar") womtool.jar
 
@@ -340,7 +340,7 @@ Resources:
             "/home/ec2-user/get_cromwell_tools.sh":
               content: !Sub |
                 #!/bin/bash
-                aws s3 --region ${AWS::Region} cp s3://singleron-ami/cromwell/cromshell .
+                aws s3 --region ${AWS::Region} cp s3://singleronbio-ami/cromwell/cromshell .
                 chmod +x cromshell
                 sudo mv cromshell /usr/local/bin/
 
@@ -590,7 +590,12 @@ Resources:
           Value: !FindInMap ["TagMap", "default", "architecture"]
         - Key: solution
           Value: !FindInMap ["TagMap", "default", "solution"]
-      
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: 20
+
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -x

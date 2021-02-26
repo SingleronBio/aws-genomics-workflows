@@ -49,9 +49,7 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      BucketName:
-        - GenerateBucketName
-        - !Ref S3BucketName
+      BucketName: !Ref S3BucketName
       Tags:
         - Key: architecture
           Value: !FindInMap ["TagMap", "default", "architecture"]
